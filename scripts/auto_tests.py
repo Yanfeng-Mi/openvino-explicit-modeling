@@ -12,32 +12,27 @@ from typing import Any, Dict, List, Optional
 PROMPT = "introduce ffmpeg in details"
 COMMON_ARGS = ["GPU", "1", "1", "100"]
 
-DEFAULT_MODELS_ROOT = r"D:\data\models"
+DEFAULT_MODELS_ROOT = r"D:\Data\models"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SCRIPT_ROOT_DEFAULT = SCRIPT_DIR.parent
+# 与 build.bat 一致：openvino、openvino.genai 在 openvino-explicit-modeling 的上级目录
+SCRIPT_ROOT_DEFAULT = SCRIPT_DIR.parent.parent
 TEST_IMAGE_PATH = SCRIPT_DIR / "test.jpg"
 TEST_OCR2_IMAGE_PATH = SCRIPT_DIR / "test_ocr2.png"
 
 TEXT_EXE_REL = (
     Path("openvino.genai")
     / "build"
-    / "samples"
-    / "cpp"
-    / "text_generation"
-    / "RelWithDebInfo"
+    / "bin"
+    / "Release"
     / "greedy_causal_lm.exe"
 )
-TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / "RelWithDebInfo"
+TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / "Release"
 MODELING_SAMPLE_DIR = (
     Path("openvino.genai")
     / "build"
-    / "src"
-    / "cpp"
-    / "src"
-    / "modeling"
-    / "samples"
-    / "RelWithDebInfo"
+    / "bin"
+    / "Release"
 )
 MODELING_QWEN_EXE_REL = MODELING_SAMPLE_DIR / "modeling_qwen3_vl.exe"
 MODELING_QWEN3_5_EXE_REL = MODELING_SAMPLE_DIR / "modeling_qwen3_5.exe"
@@ -50,14 +45,14 @@ MODELING_QWEN3_TTS_EXE_REL = MODELING_SAMPLE_DIR / "modeling_qwen3_tts.exe"
 MODELING_ULT_EXE_REL = (
     Path("openvino.genai")
     / "build"
-    / "src"
-    / "cpp"
-    / "src"
-    / "modeling"
-    / "RelWithDebInfo"
+    / "bin"
+    / "Release"
     / "test_modeling_api.exe"
 )
 PATH_PREPEND_REL = Path("openvino.genai") / "build" / "openvino_genai"
+TBB_BIN_REL_CANDIDATES: tuple = (
+    Path("openvino") / "temp" / "Windows_AMD64" / "tbb" / "bin",
+)
 
 TEXT_COMMAND_ARGS = [PROMPT, *COMMON_ARGS]
 MODELING_QWEN_ARGS = [str(TEST_IMAGE_PATH), "describe this picture", "GPU", "100"]
@@ -467,6 +462,33 @@ TEST_SPECS: List[Dict[str, Any]] = [
     },
 ]
 
+def find_tbb_bin_dir(root: Path) -> Optional[str]:
+    """查找包含 tbb12.dll 的目录（openvino 构建产物）。"""
+    for rel_path in TBB_BIN_REL_CANDIDATES:
+        candidate = root / rel_path
+        if candidate.is_dir() and (candidate / "tbb12.dll").is_file():
+            return str(candidate)
+    tbb_glob_root = root / "openvino" / "temp"
+    if tbb_glob_root.is_dir():
+        for candidate in sorted(tbb_glob_root.glob("*/tbb/bin")):
+            if candidate.is_dir() and (candidate / "tbb12.dll").is_file():
+                return str(candidate)
+    return None
+
+
+def build_path_entries(root: Path) -> List[str]:
+    path_entries = [
+        str(root / PATH_PREPEND_REL),
+        str(root / TEXT_WORK_DIR_REL),
+        str(root / Path("openvino.genai") / "build" / "bin" / "Release"),
+        str(root / Path("openvino") / "build" / "bin" / "Release"),
+    ]
+    tbb_bin_dir = find_tbb_bin_dir(root)
+    if tbb_bin_dir:
+        path_entries.insert(0, tbb_bin_dir)
+    return path_entries
+
+
 def build_env(path_entries: List[str], extra_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     env = os.environ.copy()
     original_path = env.get("PATH", "")
@@ -756,10 +778,7 @@ def main() -> int:
         indices = None
 
     tests = resolve_tests(root, models_root, indices)
-    path_entries = [
-        str(root / PATH_PREPEND_REL),
-        str(root / TEXT_WORK_DIR_REL),
-    ]
+    path_entries = build_path_entries(root)
     path_set_cmd = f"set PATH={';'.join(path_entries)};%PATH%"
 
     timestamp = _dt.datetime.now()
