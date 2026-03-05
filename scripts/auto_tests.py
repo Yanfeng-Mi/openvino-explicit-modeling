@@ -31,39 +31,23 @@ TEST_OCR2_IMAGE_PATH = SCRIPT_DIR / "test_ocr2.png"
 TEXT_EXE_REL = (
     Path("openvino.genai")
     / "build"
-    / "samples"
-    / "cpp"
-    / "text_generation"
-    / BUILD_TYPE_TOKEN
+    / "bin"
     / "greedy_causal_lm.exe"
 )
 TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / BUILD_TYPE_TOKEN
-MODELING_SAMPLE_DIR = (
-    Path("openvino.genai")
-    / "build"
-    / "src"
-    / "cpp"
-    / "src"
-    / "modeling"
-    / "samples"
-    / BUILD_TYPE_TOKEN
-)
-MODELING_QWEN_EXE_REL = MODELING_SAMPLE_DIR / "modeling_qwen3_vl.exe"
-MODELING_QWEN3_5_EXE_REL = MODELING_SAMPLE_DIR / "modeling_qwen3_5.exe"
-MODELING_DEEPSEEK_OCR2_EXE_REL = MODELING_SAMPLE_DIR / "modeling_deepseek_ocr2.exe"
-MODELING_ZIMAGE_EXE_REL = MODELING_SAMPLE_DIR / "modeling_zimage.exe"
-MODELING_WAN_T2V_EXE_REL = MODELING_SAMPLE_DIR / "modeling_wan_t2v.exe"
-MODELING_DFLASH_EXE_REL = MODELING_SAMPLE_DIR / "modeling_dflash.exe"
-MODELING_QWEN3_TTS_EXE_REL = MODELING_SAMPLE_DIR / "modeling_qwen3_tts.exe"
+GENAI_BIN_REL = Path("openvino.genai") / "build" / "bin"
+MODELING_QWEN_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_vl.exe"
+MODELING_QWEN3_5_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_5.exe"
+MODELING_DEEPSEEK_OCR2_EXE_REL = GENAI_BIN_REL / "modeling_deepseek_ocr2.exe"
+MODELING_ZIMAGE_EXE_REL = GENAI_BIN_REL / "modeling_zimage.exe"
+MODELING_WAN_T2V_EXE_REL = GENAI_BIN_REL / "modeling_wan_t2v.exe"
+MODELING_DFLASH_EXE_REL = GENAI_BIN_REL / "modeling_dflash.exe"
+MODELING_QWEN3_TTS_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_tts.exe"
 
 MODELING_ULT_EXE_REL = (
     Path("openvino.genai")
     / "build"
-    / "src"
-    / "cpp"
-    / "src"
-    / "modeling"
-    / BUILD_TYPE_TOKEN
+    / "bin"
     / "test_modeling_api.exe"
 )
 PATH_PREPEND_REL = Path("openvino.genai") / "build" / "openvino_genai"
@@ -245,21 +229,21 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3-VL-2B-Instruct",
         "model_rel": Path("Huggingface") / "Qwen3-VL-2B-Instruct",
         "exe_rel": MODELING_QWEN_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN_ARGS.copy(),
     },
     {
         "name": "Huggingface Qwen3-VL-4B-Instruct",
         "model_rel": Path("Huggingface") / "Qwen3-VL-4B-Instruct",
         "exe_rel": MODELING_QWEN_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN_ARGS.copy(),
     },
     {
         "name": "Huggingface DeepSeek-OCR-2",
         "model_rel": Path("Huggingface") / "DeepSeek-OCR-2",
         "exe_rel": MODELING_DEEPSEEK_OCR2_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_DEEPSEEK_OCR2_ARGS.copy(),
     },
     {
@@ -267,7 +251,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
        "name": "Huggingface Qwen3-VL-8B-all-inflight-quantized (int4_asym, gs128)",
        "model_rel": Path("Huggingface") / "Qwen3-VL-8B-Instruct",
        "exe_rel": MODELING_QWEN_EXE_REL,
-       "work_dir_rel": MODELING_SAMPLE_DIR,
+       "work_dir_rel": TEXT_WORK_DIR_REL,
        # [VISION_QUANT] [VISION_GS] [VISION_BACKUP] [TEXT_QUANT] [TEXT_GS] [TEXT_BACKUP]
        "command_args": MODELING_QWEN_ARGS.copy() + [
            "int4_asym", "-1", "int8_asym",
@@ -278,7 +262,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
        "name": "Huggingface Qwen3-VL-8B-only-text-inflight-quantized (int4_asym, gs128)",
        "model_rel": Path("Huggingface") / "Qwen3-VL-8B-Instruct",
        "exe_rel": MODELING_QWEN_EXE_REL,
-       "work_dir_rel": MODELING_SAMPLE_DIR,
+       "work_dir_rel": TEXT_WORK_DIR_REL,
        # [VISION_QUANT] [VISION_GS] [VISION_BACKUP] [TEXT_QUANT] [TEXT_GS] [TEXT_BACKUP]
        "command_args": MODELING_QWEN_ARGS.copy() + [
            "none", "-1", "none",
@@ -289,14 +273,14 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Z-Image-Turbo",
         "model_rel": Path("Huggingface") / "Z-Image-Turbo",
         "exe_rel": MODELING_ZIMAGE_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_ZIMAGE_ARGS.copy(),
     },
     #{
     #    "name": "Huggingface Z-Image-Turbo (int4_sym, gs128)",
     #    "model_rel": Path("Huggingface") / "Z-Image-Turbo",
     #    "exe_rel": MODELING_ZIMAGE_EXE_REL,
-    #    "work_dir_rel": MODELING_SAMPLE_DIR,
+    #    "work_dir_rel": TEXT_WORK_DIR_REL,
     #    # [DUMP_DIR] [TEXT_QUANT] [TEXT_GS] [TEXT_BACKUP] [DIT_QUANT] [DIT_GS] [DIT_BACKUP] [VAE_QUANT] [VAE_GS] [VAE_BACKUP]
     #    "command_args": MODELING_ZIMAGE_ARGS.copy() + [
     #        "int4_sym", "128", "int8_asym",
@@ -308,7 +292,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Wan2.1-T2V-1.3B-Diffusers",
         "model_rel": Path("Huggingface") / "Wan2.1-T2V-1.3B-Diffusers",
         "exe_rel": MODELING_WAN_T2V_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_WAN_T2V_ARGS.copy(),
     },
     {
@@ -316,7 +300,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "model_rel": Path("Huggingface") / "Qwen3-4B",
         "draft_model_rel": Path("Huggingface") / "Qwen3-4B-DFlash-b16",
         "exe_rel": MODELING_DFLASH_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_DFLASH_ARGS.copy(),
         "is_dflash": True,
     },
@@ -355,14 +339,14 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3-TTS-12Hz-1.7B-Base",
         "model_rel": Path("Huggingface") / "Qwen3-TTS-12Hz-1.7B-Base",
         "exe_rel": MODELING_QWEN3_TTS_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_TTS_ARGS.copy(),
     },
     {
         "name": "Huggingface Qwen3.5-0.8B modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-0.8B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -371,7 +355,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-0.8B modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-0.8B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -380,7 +364,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-2B modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-2B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -389,7 +373,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-2B modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-2B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -398,7 +382,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-4B modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-4B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -407,7 +391,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-4B modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-4B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -416,7 +400,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-9B modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-9B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -425,7 +409,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-9B modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-9B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -434,7 +418,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-27B modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-27B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -443,7 +427,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-27B modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-27B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -452,7 +436,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-35B-A3B-Base modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B-Base",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -461,7 +445,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-35B-A3B-Base modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B-Base",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -470,7 +454,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-35B-A3B modeling_qwen3_5 text",
         "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -479,7 +463,7 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "name": "Huggingface Qwen3.5-35B-A3B modeling_qwen3_5 vl",
         "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
         "exe_rel": MODELING_QWEN3_5_EXE_REL,
-        "work_dir_rel": MODELING_SAMPLE_DIR,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
         "use_named_model_arg": True,
@@ -504,6 +488,16 @@ def resolve_build_type_path(path_rel: Path, build_type: str) -> Path:
 def format_rel_path(path_rel: Path, build_type: Optional[str] = None) -> str:
     replacement = build_type if build_type is not None else "<build-type>"
     return str(path_rel).replace(BUILD_TYPE_TOKEN, replacement)
+
+
+def detect_layout_root(root: Path) -> Path:
+    candidates = [root]
+    if root.parent != root:
+        candidates.append(root.parent)
+    for candidate in candidates:
+        if (candidate / "openvino").is_dir() and (candidate / "openvino.genai").is_dir():
+            return candidate
+    return root
 
 
 def find_tbb_bin_dir(root: Path) -> Optional[str]:
@@ -745,8 +739,8 @@ def parse_args() -> argparse.Namespace:
         "--root",
         default=str(script_root),
         help=(
-            "Root folder path for openvino-new-arch. "
-            "Defaults to the parent of this script."
+            "Workspace root containing openvino and openvino.genai repos. "
+            "Defaults to the parent of this script and auto-detects sibling-repo layout."
         ),
     )
     parser.add_argument(
@@ -888,14 +882,15 @@ def main() -> int:
     root = Path(args.root)
     if not root.is_absolute():
         root = (Path.cwd() / root).resolve()
+    workspace_root = detect_layout_root(root)
     models_root = Path(args.models_root)
 
     if args.list:
         list_tests(models_root, args.build_type)
         return 0
 
-    if not root.exists():
-        print(f"Root folder not found: {root}", file=sys.stderr)
+    if not workspace_root.exists():
+        print(f"Root folder not found: {workspace_root}", file=sys.stderr)
         return 2
 
     if args.tests:
@@ -915,9 +910,11 @@ def main() -> int:
     tests: List[Dict[str, Any]] = []
 
     for candidate_build_type in candidate_build_types:
-        candidate_tests = resolve_tests(root, models_root, indices, candidate_build_type)
+        candidate_tests = resolve_tests(
+            workspace_root, models_root, indices, candidate_build_type
+        )
         missing_artifacts = collect_missing_build_artifacts(
-            root, candidate_tests, candidate_build_type
+            workspace_root, candidate_tests, candidate_build_type
         )
         if not missing_artifacts:
             selected_build_type = candidate_build_type
@@ -954,12 +951,12 @@ def main() -> int:
         )
     print(f"Using build type: {selected_build_type}")
 
-    path_entries = build_path_entries(root, selected_build_type)
+    path_entries = build_path_entries(workspace_root, selected_build_type)
 
     timestamp = _dt.datetime.now()
     stamp_for_name = timestamp.strftime("%Y%m%d_%H%M%S")
     stamp_for_title = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-    reports_dir = root.parent / "reports"
+    reports_dir = workspace_root / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     report_path = reports_dir / f"test_report_{stamp_for_name}.md"
 
