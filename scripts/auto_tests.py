@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-PROMPT = "introduce ffmpeg in details"
+DEFAULT_PROMPT = "introduce ffmpeg in details"
+PROMPT_FILE_NAME = "prompt_1k.txt"
 COMMON_ARGS = ["GPU", "1", "1", "100"]
 
 DEFAULT_MODELS_ROOT = r"D:\data\models"
@@ -27,6 +28,18 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPT_ROOT_DEFAULT = SCRIPT_DIR.parent
 TEST_IMAGE_PATH = SCRIPT_DIR / "test.jpg"
 TEST_OCR2_IMAGE_PATH = SCRIPT_DIR / "test_ocr2.png"
+PROMPT_FILE_PATH = SCRIPT_DIR / PROMPT_FILE_NAME
+
+
+def load_prompt(prompt_file_path: Path, fallback_prompt: str) -> str:
+    try:
+        content = prompt_file_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return fallback_prompt
+    return content if content else fallback_prompt
+
+
+PROMPT = load_prompt(PROMPT_FILE_PATH, DEFAULT_PROMPT)
 
 TEXT_EXE_REL = (
     Path("openvino.genai")
@@ -105,7 +118,7 @@ MODELING_QWEN3_5_TEXT_ARGS = [
     "--mode",
     "text",
     "--prompt",
-    "write opencl gemm kernel and host code: ",
+    PROMPT,
     "--output-tokens",
     "300",
 ]
