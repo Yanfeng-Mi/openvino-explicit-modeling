@@ -12,7 +12,6 @@ from typing import Dict, List
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 ROOT_DIR = PROJECT_DIR.parent
-DEFAULT_PROMPT_FILE = ROOT_DIR / "wwb_prompt.txt"
 DEFAULT_RESULTS_DIR = ROOT_DIR / "wwb_results"
 OPENVINO_BIN = ROOT_DIR / "openvino" / "bin" / "intel64" / "Release"
 TBB_BIN = ROOT_DIR / "openvino" / "temp" / "Windows_AMD64" / "tbb" / "bin"
@@ -30,6 +29,36 @@ MODELS = [
     Path(r"D:\data\models\Huggingface\Qwen3.5-4B"),
     Path(r"D:\data\models\Huggingface\Qwen3.5-9B"),
     Path(r"D:\data\models\Huggingface\Qwen3.5-35B-A3B"),
+]
+
+BUILTIN_PROMPTS = [
+    "Who is Mark Twain?",
+    "Who is William Shakespeare?",
+    "Who is Agatha Christie?",
+    "Who is Barbara Cartland?",
+    "Who is Danielle Steel?",
+    "Who is Harold Robbins?",
+    "Who is Georges Simenon?",
+    "Who is Enid Blyton?",
+    "Who is Sidney Sheldon?",
+    "Who is Akira Toriyama?",
+    "Who is Leo Tolstoy?",
+    "Who is Alexander Pushkin?",
+    "Who is Stephen King?",
+    "What is C++?",
+    "What is Python?",
+    "What is Java?",
+    "What is JavaScript?",
+    "What is Perl?",
+    "What is OpenCV?",
+    "Who is the most famous writer?",
+    "Who is the most famous inventor?",
+    "Who is the most famous mathematician?",
+    "Who is the most famous composer?",
+    "Who is the most famous programmer?",
+    "Who is the most famous athlete?",
+    "Who is the most famous ancient Greek scientist?",
+    "What color will you get when you mix blue and yellow?",
 ]
 
 ENV_OVERRIDES = {
@@ -62,13 +91,13 @@ class QuantPreset:
 
 
 QUANT_PRESETS: Dict[int, QuantPreset] = {
-    0: QuantPreset("none", 0, "none"),
     1: QuantPreset("int4_asym", 32, "int4_asym"),
     2: QuantPreset("int4_sym", 64, "int4_sym"),
     3: QuantPreset("int4_asym", 128, "int4_asym"),
     4: QuantPreset("int4_asym", 32, "int8_asym"),
     5: QuantPreset("int8_asym", 64, "int8_asym"),
     6: QuantPreset("int8_sym", 128, "int8_sym"),
+    7: QuantPreset("none", 0, "none"),
 }
 
 
@@ -155,27 +184,36 @@ def parse_model_selection(spec: str, max_index: int) -> List[int]:
 
 
 def parse_quant_selection(spec: str) -> List[int]:
-    selected = parse_index_selection(spec, 0, max(QUANT_PRESETS.keys()), "--quant-list", allow_all=True)
+    selected = parse_index_selection(spec, 1, max(QUANT_PRESETS.keys()), "--quant-list", allow_all=True)
     invalid = [idx for idx in selected if idx not in QUANT_PRESETS]
     if invalid:
         raise ValueError(f"Unsupported quant preset index in --quant-list: {invalid}")
     return selected
 
 
-def load_prompts(prompt_file: Path) -> List[str]:
-    if not prompt_file.exists():
-        raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
+def parse_prompt_selection(spec: str) -> List[int]:
+    return parse_index_selection(spec, 1, len(BUILTIN_PROMPTS), "--prompt-list", allow_all=True)
 
-    prompts: List[str] = []
-    with prompt_file.open("r", encoding="utf-8") as f:
-        for line in f:
-            text = line.strip()
-            if text:
-                prompts.append(text)
 
-    if not prompts:
-        raise ValueError(f"No valid prompts found in: {prompt_file}")
-    return prompts
+def summarize_selection(indices: List[int], min_index: int, max_index: int) -> str:
+    normalized = sorted(set(indices))
+    if normalized == list(range(min_index, max_index + 1)):
+        return "all"
+    if not normalized:
+        return "none"
+
+    parts: List[str] = []
+    start = normalized[0]
+    end = normalized[0]
+    for idx in normalized[1:]:
+        if idx == end + 1:
+            end = idx
+        else:
+            parts.append(f"{start}" if start == end else f"{start}~{end}")
+            start = idx
+            end = idx
+    parts.append(f"{start}" if start == end else f"{start}~{end}")
+    return ",".join(parts)
 
 
 def sanitize_filename(name: str) -> str:
@@ -183,25 +221,31 @@ def sanitize_filename(name: str) -> str:
 
 
 def run_for_model(
+    model_index: int,
     model_path: Path,
     quant_index: int,
     quant_preset: QuantPreset,
     prompts: List[str],
+    prompt_selection_tag: str,
     output_tokens: int,
-    results_dir: Path,
+    run_dir: Path,
     env: dict,
 ) -> int:
     model_name = model_path.name
-    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    quant_tag = sanitize_filename(f"q{quant_index}_{quant_preset.tag}")
-    result_file = results_dir / f"{sanitize_filename(model_name)}_{quant_tag}_{timestamp}.txt"
+    model_tag = sanitize_filename(f"m{model_index}_{model_name}")
+    quant_desc = f"{quant_preset.mode}_g{quant_preset.group_size}_{quant_preset.backup_mode}"
+    quant_tag = sanitize_filename(f"q{quant_index}_{quant_desc}")
+    prompt_tag = sanitize_filename(f"p{prompt_selection_tag}")
+    token_tag = sanitize_filename(f"ot{output_tokens}")
+    result_file = run_dir / f"{model_tag}__{quant_tag}__{prompt_tag}__{token_tag}.txt"
 
     fail_count = 0
     with result_file.open("w", encoding="utf-8", errors="replace") as out:
         out.write(f"Model: {model_path}\n")
+        out.write(f"Model index: {model_index}\n")
         out.write(f"Quant preset: {quant_index} {quant_preset.display}\n")
+        out.write(f"Prompt selection: {prompt_selection_tag}\n")
         out.write(f"Prompt count: {len(prompts)}\n")
-        out.write(f"Timestamp: {timestamp}\n")
         out.write(f"OV_GENAI_INFLIGHT_QUANT_MODE={env.get('OV_GENAI_INFLIGHT_QUANT_MODE', '<unset>')}\n")
         out.write(f"OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE={env.get('OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE', '<unset>')}\n")
         out.write(f"OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE={env.get('OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE', '<unset>')}\n")
@@ -259,40 +303,46 @@ def run_for_model(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run all prompts in wwb_prompt.txt against selected Qwen models and save raw outputs."
+        description="Run built-in prompts against selected Qwen models and save raw outputs.",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
+    model_mapping = "\n".join(f"  {idx}. {model.name}" for idx, model in enumerate(MODELS, start=1))
+    quant_mapping = "\n".join(f"  {idx}. {preset.display}" for idx, preset in QUANT_PRESETS.items())
+    prompt_mapping = "\n".join(f"  {idx}. {prompt}" for idx, prompt in enumerate(BUILTIN_PROMPTS, start=1))
     parser.add_argument(
         "--models",
         "--models-list",
         dest="models",
-        default="1~9",
-        help="Model index selectors. Examples: 1,3,4  |  1~5  |  2,4~5,6,8~9",
+        default="1",
+        help=(
+            "Model index selectors (default: 1). Examples: 1,3,4 | 1~5 | 2,4~5,6,8~9\n"
+            "Model index mapping:\n"
+            f"{model_mapping}"
+        ),
     )
     parser.add_argument(
         "--quant-list",
-        default="3",
-        help="Quant preset selectors. Examples: 1 | 2,3,4 | all | 1~6 | 1~3,4,5~6",
+        default="1",
+        help=(
+            "Quant preset selectors (default: 1). Examples: 1 | 2,3,4 | all | 1~7 | 1~3,4,5~7\n"
+            "Quant preset mapping:\n"
+            f"{quant_mapping}"
+        ),
     )
     parser.add_argument(
-        "--prompt-file",
-        default=str(DEFAULT_PROMPT_FILE),
-        help=f"Prompt file path (default: {DEFAULT_PROMPT_FILE})",
+        "--prompt-list",
+        default="1",
+        help=(
+            "Prompt selectors (default: 1). Examples: 1 | 2,3,4 | all | 1~27 | 1~3,4,5~7\n"
+            "Prompt index mapping:\n"
+            f"{prompt_mapping}"
+        ),
     )
     parser.add_argument(
         "--output-tokens",
         type=int,
-        default=3000,
-        help="Value passed to --output-tokens (default: 3000).",
-    )
-    parser.add_argument(
-        "--list-models",
-        action="store_true",
-        help="Print model index mapping and exit.",
-    )
-    parser.add_argument(
-        "--list-quants",
-        action="store_true",
-        help="Print quant preset mapping and exit.",
+        default=2000,
+        help="Value passed to --output-tokens (default: 2000).",
     )
     return parser
 
@@ -307,11 +357,6 @@ def main() -> int:
     print("Available quant presets:")
     for idx, preset in QUANT_PRESETS.items():
         print(f"  {idx}. {preset.display}")
-
-    if args.list_models:
-        return 0
-    if args.list_quants:
-        return 0
 
     try:
         validate_runtime_layout()
@@ -330,18 +375,27 @@ def main() -> int:
         return 2
 
     try:
-        prompts = load_prompts(Path(args.prompt_file))
-    except (FileNotFoundError, ValueError) as e:
+        selected_prompt_indices = parse_prompt_selection(args.prompt_list)
+    except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
 
+    prompts = [BUILTIN_PROMPTS[idx - 1] for idx in selected_prompt_indices]
+
     results_dir = DEFAULT_RESULTS_DIR
     results_dir.mkdir(parents=True, exist_ok=True)
+    run_id = dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    run_dir = results_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    prompt_selection_tag = summarize_selection(selected_prompt_indices, 1, len(BUILTIN_PROMPTS))
 
     print(f"Selected models: {selected_indices}")
     print(f"Selected quant presets: {selected_quant_indices}")
-    print(f"Prompt file: {args.prompt_file} (loaded {len(prompts)} prompts)")
-    print(f"Results dir: {results_dir}")
+    print(f"Selected prompt indices: {selected_prompt_indices}")
+    print(f"Built-in prompts selected: {len(prompts)}/{len(BUILTIN_PROMPTS)}")
+    print(f"Run id: {run_id}")
+    print(f"Results root dir: {results_dir}")
+    print(f"Current run dir: {run_dir}")
     print(f"BIN dir: {BIN_DIR}")
 
     total_failures = 0
@@ -350,12 +404,14 @@ def main() -> int:
             quant_preset = QUANT_PRESETS[quant_idx]
             env = build_runtime_env(quant_preset)
             total_failures += run_for_model(
+                model_index=idx,
                 model_path=MODELS[idx - 1],
                 quant_index=quant_idx,
                 quant_preset=quant_preset,
                 prompts=prompts,
+                prompt_selection_tag=prompt_selection_tag,
                 output_tokens=args.output_tokens,
-                results_dir=results_dir,
+                run_dir=run_dir,
                 env=env,
             )
 
