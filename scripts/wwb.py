@@ -349,6 +349,7 @@ def run_for_model(
     output_tokens: int,
     run_dir: Path,
     env: dict,
+    repetition_penalty: Optional[float] = None,
 ) -> int:
     model_name = model_path.name
     model_tag = sanitize_filename(f"m{model_index}_{model_name}")
@@ -383,6 +384,8 @@ def run_for_model(
                 "--output-tokens",
                 str(output_tokens),
             ]
+            if repetition_penalty is not None:
+                cmd.extend(["--repetition-penalty", str(repetition_penalty)])
 
             header = (
                 "\n"
@@ -468,6 +471,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=2000,
         help="Value passed to --output-tokens (default: 2000).",
     )
+    parser.add_argument(
+        "--repetition-penalty",
+        type=float,
+        default=None,
+        help="Repetition penalty passed to the exe (default: use exe built-in default 1.1).",
+    )
     return parser
 
 
@@ -548,6 +557,7 @@ def main() -> int:
                 output_tokens=args.output_tokens,
                 run_dir=run_dir,
                 env=env,
+                repetition_penalty=args.repetition_penalty,
             )
 
     summary_path = write_summary_markdown(run_dir)
