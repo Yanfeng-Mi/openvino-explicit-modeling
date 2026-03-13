@@ -6,7 +6,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -19,6 +19,7 @@ GENAI_DLL_DIR = ROOT_DIR / "openvino.genai" / "build" / "openvino_genai"
 BIN_DIR = ROOT_DIR / "openvino.genai" / "build" / "bin"
 EXE_PATH = BIN_DIR / "modeling_qwen3_5.exe"
 DEFAULT_MODEL_ROOT = Path(r"C:\data\models\Huggingface")
+SUMMARY_FILE_NAME = "summary.md"
 
 MODEL_NAMES = [
     "Qwen3-0.6B",
@@ -223,6 +224,119 @@ def summarize_selection(indices: List[int], min_index: int, max_index: int) -> s
 
 def sanitize_filename(name: str) -> str:
     return re.sub(r"[\\/:*?\"<>|]+", "_", name)
+
+
+def extract_first_match(pattern: str, text: str) -> Optional[str]:
+    match = re.search(pattern, text, re.MULTILINE)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def parse_single_log_for_summary(log_path: Path) -> List[Dict[str, str]]:
+    content = log_path.read_text(encoding="utf-8", errors="replace")
+
+    model_full_path = extract_first_match(r"^Model:\s*(.+)$", content) or ""
+    model_name = Path(model_full_path.strip("\"")).name if model_full_path else "N/A"
+    if model_name in ("", ".", "\\", "/"):
+        name_match = re.search(r"^m\d+_(.+?)__q\d+_", log_path.name)
+        model_name = name_match.group(1) if name_match else "N/A"
+
+    quant_tuple = extract_first_match(r"^Quant preset:\s*\d+\s*(\[[^\]]+\])\s*$", content) or "N/A"
+
+    question_matches = list(re.finditer(r"^Question\s+(\d+)\s*/\s*(\d+)\s*$", content, re.MULTILINE))
+    if not question_matches:
+        return [
+            {
+                "model_name": model_name,
+                "quant_tuple": quant_tuple,
+                "input_tokens": "N/A",
+                "output_tokens": "N/A",
+                "ttft_ms": "N/A",
+                "throughput_tps": "N/A",
+            }
+        ]
+
+    rows: List[Dict[str, str]] = []
+    for idx, match in enumerate(question_matches):
+        block_start = match.start()
+        block_end = question_matches[idx + 1].start() if idx + 1 < len(question_matches) else len(content)
+        block = content[block_start:block_end]
+
+        return_code = extract_first_match(r"^\[Return code\]\s*(-?\d+)\s*$", block)
+        failed = return_code is None or return_code != "0"
+
+        input_tokens = extract_first_match(r"^Prompt token size:\s*(\d+)\s*$", block) or "N/A"
+        output_tokens = extract_first_match(r"^Output token size:\s*(\d+)\s*$", block) or "N/A"
+        ttft_ms = extract_first_match(r"^TTFT:\s*([0-9]+(?:\.[0-9]+)?)\s*ms\s*$", block) or "N/A"
+        throughput_tps = (
+            extract_first_match(r"^Throughput:\s*([0-9]+(?:\.[0-9]+)?)\s*tokens/s\s*$", block) or "N/A"
+        )
+
+        if failed:
+            input_tokens = "N/A"
+            output_tokens = "N/A"
+            ttft_ms = "N/A"
+            throughput_tps = "N/A"
+
+        rows.append(
+            {
+                "model_name": model_name,
+                "quant_tuple": quant_tuple,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "ttft_ms": ttft_ms,
+                "throughput_tps": throughput_tps,
+            }
+        )
+
+    return rows
+
+
+def to_markdown_cell(value: str) -> str:
+    return value.replace("|", r"\|")
+
+
+def build_summary_markdown(rows: List[Dict[str, str]]) -> str:
+    lines = [
+        "# WWB Test Summary",
+        "",
+        f"- Total tests: {len(rows)}",
+        "",
+        "| Model | Quant (3-tuple) | Input Tokens | Output Tokens | TTFT (ms) | Throught (tokens/s) |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+
+    if not rows:
+        lines.append("| N/A | N/A | N/A | N/A | N/A | N/A |")
+    else:
+        for row in rows:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        to_markdown_cell(row["model_name"]),
+                        to_markdown_cell(row["quant_tuple"]),
+                        to_markdown_cell(row["input_tokens"]),
+                        to_markdown_cell(row["output_tokens"]),
+                        to_markdown_cell(row["ttft_ms"]),
+                        to_markdown_cell(row["throughput_tps"]),
+                    ]
+                )
+                + " |"
+            )
+
+    return "\n".join(lines) + "\n"
+
+
+def write_summary_markdown(run_dir: Path) -> Path:
+    rows: List[Dict[str, str]] = []
+    for log_path in sorted(run_dir.glob("*.txt")):
+        rows.extend(parse_single_log_for_summary(log_path))
+
+    summary_path = run_dir / SUMMARY_FILE_NAME
+    summary_path.write_text(build_summary_markdown(rows), encoding="utf-8")
+    return summary_path
 
 
 def run_for_model(
@@ -435,6 +549,18 @@ def main() -> int:
                 run_dir=run_dir,
                 env=env,
             )
+
+    summary_path = write_summary_markdown(run_dir)
+    print(f"Summary markdown: {summary_path}")
+    try:
+        summary_text = summary_path.read_text(encoding="utf-8", errors="replace")
+        print("=" * 80)
+        print("Summary Markdown Content")
+        print("=" * 80)
+        print(summary_text, end="" if summary_text.endswith("\n") else "\n")
+        print("=" * 80)
+    except OSError as e:
+        print(f"WARNING: Failed to read summary markdown for console output: {e}", file=sys.stderr)
 
     if total_failures > 0:
         print(f"Completed with failures. Failed runs: {total_failures}")
