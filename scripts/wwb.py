@@ -18,17 +18,18 @@ TBB_BIN = ROOT_DIR / "openvino" / "temp" / "Windows_AMD64" / "tbb" / "bin"
 GENAI_DLL_DIR = ROOT_DIR / "openvino.genai" / "build" / "openvino_genai"
 BIN_DIR = ROOT_DIR / "openvino.genai" / "build" / "bin"
 EXE_PATH = BIN_DIR / "modeling_qwen3_5.exe"
+DEFAULT_MODEL_ROOT = Path(r"C:\data\models\Huggingface")
 
-MODELS = [
-    Path(r"D:\data\models\Huggingface\Qwen3-0.6B"),
-    Path(r"D:\data\models\Huggingface\Qwen3-2B"),
-    Path(r"D:\data\models\Huggingface\Qwen3-4B"),
-    Path(r"D:\data\models\Huggingface\Qwen3-8B"),
-    Path(r"D:\data\models\Huggingface\Qwen3.5-0.8B"),
-    Path(r"D:\data\models\Huggingface\Qwen3.5-2B"),
-    Path(r"D:\data\models\Huggingface\Qwen3.5-4B"),
-    Path(r"D:\data\models\Huggingface\Qwen3.5-9B"),
-    Path(r"D:\data\models\Huggingface\Qwen3.5-35B-A3B"),
+MODEL_NAMES = [
+    "Qwen3-0.6B",
+    "Qwen3-2B",
+    "Qwen3-4B",
+    "Qwen3-8B",
+    "Qwen3.5-0.8B",
+    "Qwen3.5-2B",
+    "Qwen3.5-4B",
+    "Qwen3.5-9B",
+    "Qwen3.5-35B-A3B",
 ]
 
 BUILTIN_PROMPTS = [
@@ -121,6 +122,10 @@ def build_runtime_env(quant_preset: QuantPreset) -> dict:
     path_value = os.pathsep.join(str(p) for p in prepend_dirs) + os.pathsep + env.get("PATH", "")
     env["PATH"] = path_value
     return env
+
+
+def build_model_paths(model_root: Path) -> List[Path]:
+    return [model_root / model_name for model_name in MODEL_NAMES]
 
 
 def validate_runtime_layout() -> None:
@@ -306,7 +311,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Run built-in prompts against selected Qwen models and save raw outputs.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    model_mapping = "\n".join(f"  {idx}. {model.name}" for idx, model in enumerate(MODELS, start=1))
+    model_mapping = "\n".join(f"  {idx}. {model_name}" for idx, model_name in enumerate(MODEL_NAMES, start=1))
     quant_mapping = "\n".join(f"  {idx}. {preset.display}" for idx, preset in QUANT_PRESETS.items())
     prompt_mapping = "\n".join(f"  {idx}. {prompt}" for idx, prompt in enumerate(BUILTIN_PROMPTS, start=1))
     parser.add_argument(
@@ -319,6 +324,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Model index mapping:\n"
             f"{model_mapping}"
         ),
+    )
+    parser.add_argument(
+        "--model-root",
+        default=str(DEFAULT_MODEL_ROOT),
+        help=f"Model root folder (default: {DEFAULT_MODEL_ROOT}).",
     )
     parser.add_argument(
         "--quant-list",
@@ -351,20 +361,25 @@ def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
 
+    try:
+        validate_runtime_layout()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+
+    model_root = Path(args.model_root)
+    models = build_model_paths(model_root)
+
+    print(f"Model root: {model_root}")
     print("Available models:")
-    for idx, model in enumerate(MODELS, start=1):
+    for idx, model in enumerate(models, start=1):
         print(f"  {idx}. {model}")
     print("Available quant presets:")
     for idx, preset in QUANT_PRESETS.items():
         print(f"  {idx}. {preset.display}")
 
     try:
-        validate_runtime_layout()
-    except FileNotFoundError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 2
-    try:
-        selected_indices = parse_model_selection(args.models, len(MODELS))
+        selected_indices = parse_model_selection(args.models, len(models))
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
@@ -381,6 +396,12 @@ def main() -> int:
         return 2
 
     prompts = [BUILTIN_PROMPTS[idx - 1] for idx in selected_prompt_indices]
+    missing_models = [models[idx - 1] for idx in selected_indices if not models[idx - 1].exists()]
+    if missing_models:
+        print("ERROR: The following model paths do not exist:", file=sys.stderr)
+        for model_path in missing_models:
+            print(f"  {model_path}", file=sys.stderr)
+        return 2
 
     results_dir = DEFAULT_RESULTS_DIR
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -405,7 +426,7 @@ def main() -> int:
             env = build_runtime_env(quant_preset)
             total_failures += run_for_model(
                 model_index=idx,
-                model_path=MODELS[idx - 1],
+                model_path=models[idx - 1],
                 quant_index=quant_idx,
                 quant_preset=quant_preset,
                 prompts=prompts,
