@@ -42,6 +42,10 @@ def load_prompt(prompt_file_path: Path, fallback_prompt: str) -> str:
 
 PROMPT = load_prompt(PROMPT_FILE_PATH, DEFAULT_PROMPT)
 
+# Perf validation prompt files
+PROMPT_PERF_1K_PATH = SCRIPT_DIR / "prompt_perf_1k.txt"
+PROMPT_PERF_256K_PATH = SCRIPT_DIR / "prompt_perf_256k.txt"
+
 TEXT_EXE_REL = (
     Path("openvino.genai")
     / "build"
@@ -177,6 +181,21 @@ MODELING_QWEN3_5_VL_ARGS = [
     "--output-tokens",
     "300",
 ]
+
+# Perf validation args: use --prompt-file to handle large prompts (avoids Windows CLI length limits)
+def _make_perf_args(prompt_file_path: Path, prompt_token_size: Optional[int] = None) -> List[str]:
+    args = [
+        "--cache-model",
+        "--mode", "text",
+        "--prompt-file", str(prompt_file_path),
+        "--output-tokens", "1000",
+    ]
+    if prompt_token_size is not None:
+        args += ["--prompt-token-size", str(prompt_token_size)]
+    return args
+
+MODELING_QWEN3_5_PERF_1K_ARGS = _make_perf_args(PROMPT_PERF_1K_PATH)
+MODELING_QWEN3_5_PERF_256K_ARGS = _make_perf_args(PROMPT_PERF_256K_PATH, 256000)
 
 QUANT_DEFAULT_ARGS = ["int4_asym", "128", "int8_asym"]
 QUANT_INT4_CHANNEL_WISE_ARGS = ["int4_asym", "-1", "int8_asym"]
@@ -551,12 +570,35 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_ASR_AUDIO_ARGS.copy(),
     },
-        {
+    {
         "name": "Huggingface Qwen3-ASR-0.6B text-only",
         "model_rel": Path("Huggingface") / "Qwen3-ASR-0.6B",
         "exe_rel": MODELING_QWEN3_ASR_EXE_REL,
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_ASR_TEXT_ARGS.copy(),
+    },
+    # ---------------------------------------------------------------------------
+    # Perf validation: Qwen3.5-35B-A3B with variable-length prompts
+    # Use --prompt-token-size N to limit input to N tokens from the 256K prompt file.
+    # Prerequisites: run --tests 39 once to build cache, then collect with --tests 39,39,39
+    # ---------------------------------------------------------------------------
+    {
+        "name": "Qwen3.5-35B-A3B perf 1K text",
+        "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_PERF_1K_ARGS,
+        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Qwen3.5-35B-A3B perf 256K text",
+        "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_PERF_256K_ARGS,
+        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
+        "use_named_model_arg": True,
     },
 ]
 
@@ -605,6 +647,23 @@ def resolve_executable_path(root: Path, exe_rel: Path, build_type: str) -> Path:
 def format_rel_path(path_rel: Path, build_type: Optional[str] = None) -> str:
     replacement = build_type if build_type is not None else "<build-type>"
     return str(path_rel).replace(BUILD_TYPE_TOKEN, replacement)
+
+
+def resolve_executable_path(root: Path, exe_rel: Path, build_type: str) -> Path:
+    # Prefer the original layout first, then fall back to VS multi-config layout:
+    #   openvino.genai/build/bin/<BuildType>/*.exe
+    primary = root / resolve_build_type_path(exe_rel, build_type)
+    candidates = [primary]
+
+    if exe_rel.suffix.lower() == ".exe":
+        candidate_with_config_subdir = root / exe_rel.parent / build_type / exe_rel.name
+        candidates.append(candidate_with_config_subdir)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    return primary
 
 
 def detect_layout_root(root: Path) -> Path:
@@ -884,6 +943,13 @@ def parse_args() -> argparse.Namespace:
         help="Test indices to run. Supports individual indices (0,1,2), ranges (1~5), or 'all'. "
              "Examples: '0,1,2', '1~5,7,8~10', 'all'. If omitted, run all.",
     )
+    parser.add_argument(
+        "--prompt-token-size",
+        type=int,
+        metavar="N",
+        help="Limit the prompt to N tokens for perf tests that use --prompt-file. "
+             "Passed as --prompt-token-size N to the executable.",
+    )
     return parser.parse_args()
 
 
@@ -1099,6 +1165,14 @@ def main() -> int:
             return 2
 
         command_args = list(test["command_args"])
+
+        # Override prompt token size for perf tests that use --prompt-file
+        if args.prompt_token_size is not None and "--prompt-file" in command_args:
+            if "--prompt-token-size" in command_args:
+                idx = command_args.index("--prompt-token-size")
+                command_args[idx + 1] = str(args.prompt_token_size)
+            else:
+                command_args += ["--prompt-token-size", str(args.prompt_token_size)]
 
         # Handle Z-Image test: add timestamp to output filename
         is_zimage_test = "Z-Image" in test["name"]
