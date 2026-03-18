@@ -55,6 +55,7 @@ TEXT_EXE_REL = (
 )
 TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / BUILD_TYPE_TOKEN
 GENAI_BIN_REL = Path("openvino.genai") / "build" / "bin" / BUILD_TYPE_TOKEN
+GENAI_RUNTIME_BIN_REL = Path("openvino.genai") / "build" / "bin"
 MODELING_QWEN_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_vl.exe"
 MODELING_QWEN3_5_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_5.exe"
 MODELING_DEEPSEEK_OCR2_EXE_REL = GENAI_BIN_REL / "modeling_deepseek_ocr2.exe"
@@ -693,6 +694,7 @@ def find_tbb_bin_dir(root: Path) -> Optional[str]:
 def build_path_entries(root: Path, build_type: str) -> List[str]:
     path_entries = [
         str(root / PATH_PREPEND_REL),
+        str(root / GENAI_RUNTIME_BIN_REL),
         str(root / resolve_build_type_path(TEXT_WORK_DIR_REL, build_type)),
     ]
     tbb_bin_dir = find_tbb_bin_dir(root)
@@ -735,6 +737,10 @@ def collect_missing_build_artifacts(
                 f"OpenVINO runtime DLL not found for build type {build_type}",
                 dll_path,
             )
+
+    genai_runtime_bin_dir = root / GENAI_RUNTIME_BIN_REL
+    if not genai_runtime_bin_dir.is_dir():
+        add_missing("OpenVINO GenAI runtime bin directory not found", genai_runtime_bin_dir)
 
     for test in tests:
         exe_path = Path(test["exe"])

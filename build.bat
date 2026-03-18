@@ -11,6 +11,7 @@ set "OPENVINO_SRC=%ROOT%\openvino"
 set "OPENVINO_BUILD=%OPENVINO_SRC%\build"
 set "GENAI_SRC=%ROOT%\openvino.genai"
 set "GENAI_BUILD=%GENAI_SRC%\build"
+set "GENAI_BIN_ROOT=%GENAI_BUILD%\bin"
 set "WHEEL_OUTPUT_ROOT=%ROOT%\wheel"
 set "WHEEL_VENV_ROOT=%SCRIPT_DIR%\.wheel-build-venv"
 set "WHEEL_SCRIPT=%SCRIPT_DIR%\scripts\wheel.py"
@@ -26,6 +27,7 @@ set "WHEEL_TAG="
 set "BUILD_OPENVINO=1"
 set "BUILD_GENAI=1"
 set "BUILD_WHEEL=0"
+if not defined BUILD_TYPE set "BUILD_TYPE=Release"
 set "INVALID_ARG="
 set "ARG_ERROR="
 set "SHOW_USAGE=0"
@@ -125,7 +127,7 @@ exit /b 0
 :configure_openvino
 if defined OPENVINO_ALREADY_CONFIGURED exit /b 0
 
-set "OPENVINO_CMAKE_ARGS=-DCMAKE_BUILD_TYPE=Release"
+set "OPENVINO_CMAKE_ARGS=-DCMAKE_BUILD_TYPE=%BUILD_TYPE%"
 if "%BUILD_WHEEL%"=="1" (
     call :ensure_wheel_python
     if errorlevel 1 exit /b 1
@@ -158,7 +160,7 @@ if not exist "%OPENVINO_BUILD%\OpenVINOConfig.cmake" (
 )
 
 echo [BUILD] openvino.genai
-set "GENAI_CMAKE_ARGS=-DCMAKE_BUILD_TYPE=Release -DOpenVINO_DIR=%OPENVINO_BUILD%"
+set "GENAI_CMAKE_ARGS=-DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DOpenVINO_DIR=%OPENVINO_BUILD%"
 if "%BUILD_WHEEL%"=="1" (
     call :ensure_wheel_python
     if errorlevel 1 exit /b 1
@@ -190,6 +192,9 @@ if errorlevel 1 (
     echo [ERROR] Build failed for openvino.genai.
     exit /b 1
 )
+
+call :stage_genai_bin_layout
+if errorlevel 1 exit /b 1
 exit /b 0
 
 :build_wheels
@@ -203,7 +208,7 @@ call :prepare_wheel_output
 if errorlevel 1 exit /b 1
 
 echo [BUILD] openvino wheel
-cmake --build "%OPENVINO_BUILD%" --config Release --target ie_wheel --parallel
+cmake --build "%OPENVINO_BUILD%" --config %BUILD_TYPE% --target ie_wheel --parallel
 if errorlevel 1 (
     echo [ERROR] Failed to build the openvino wheel.
     exit /b 1
@@ -464,6 +469,36 @@ if errorlevel 1 (
     echo [ERROR] Failed to copy %OPENVINO_WHEEL% into %WHEEL_OUTPUT_DIR%.
     exit /b 1
 )
+exit /b 0
+
+:stage_genai_bin_layout
+set "GENAI_BIN_DIR=%GENAI_BIN_ROOT%\%BUILD_TYPE%"
+if not exist "%GENAI_BIN_ROOT%" (
+    echo [ERROR] OpenVINO GenAI bin directory not found: %GENAI_BIN_ROOT%
+    exit /b 1
+)
+
+if not exist "%GENAI_BIN_DIR%" mkdir "%GENAI_BIN_DIR%"
+if errorlevel 1 (
+    echo [ERROR] Failed to create OpenVINO GenAI build-type bin directory: %GENAI_BIN_DIR%
+    exit /b 1
+)
+
+del /q "%GENAI_BIN_DIR%\*.dll" 2>nul
+if errorlevel 1 (
+    echo [ERROR] Failed to clean stale OpenVINO GenAI runtime DLLs from %GENAI_BIN_DIR%.
+    exit /b 1
+)
+
+for %%I in ("%GENAI_BIN_ROOT%\*.exe") do (
+    if exist "%%~fI" copy /y "%%~fI" "%GENAI_BIN_DIR%\" >nul
+)
+if errorlevel 1 (
+    echo [ERROR] Failed to stage OpenVINO GenAI executable files into %GENAI_BIN_DIR%.
+    exit /b 1
+)
+
+echo [INFO] OpenVINO GenAI executable files staged in: %GENAI_BIN_DIR%
 exit /b 0
 
 :ensure_host_python

@@ -37,7 +37,8 @@ RESULTS_BASE = WORKSPACE_DIR / "results_ifeval"    # output outside repo
 OV_BIN = WORKSPACE_DIR / "openvino" / "bin" / "intel64" / "Release"
 TBB_BIN = WORKSPACE_DIR / "openvino" / "temp" / "Windows_AMD64" / "tbb" / "bin"
 GENAI_DLL = WORKSPACE_DIR / "openvino.genai" / "build" / "openvino_genai"
-GENAI_BIN = WORKSPACE_DIR / "openvino.genai" / "build" / "bin"
+GENAI_RUNTIME_BIN = WORKSPACE_DIR / "openvino.genai" / "build" / "bin"
+GENAI_BIN = WORKSPACE_DIR / "openvino.genai" / "build" / "bin" / "Release"
 EXE = GENAI_BIN / "modeling_qwen3_5.exe"
 
 DEFAULT_MODEL_ROOT = Path(r"d:\data\models\Huggingface")
@@ -213,7 +214,7 @@ Sampling parameters (passed to modeling_qwen3_5.exe):
 def build_env(quant: QuantPreset) -> dict:
     """Build the environment dict matching run.bat."""
     env = os.environ.copy()
-    extra_path = f"{OV_BIN};{TBB_BIN};{GENAI_DLL};{GENAI_BIN}"
+    extra_path = f"{OV_BIN};{TBB_BIN};{GENAI_DLL};{GENAI_RUNTIME_BIN};{GENAI_BIN}"
     env["PATH"] = extra_path + ";" + env.get("PATH", "")
     env["OV_GENAI_USE_MODELING_API"] = "1"
     env["OV_GENAI_SAVE_OV_MODEL"] = "1"

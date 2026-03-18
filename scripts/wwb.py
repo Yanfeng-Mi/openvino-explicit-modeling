@@ -16,7 +16,8 @@ DEFAULT_RESULTS_DIR = ROOT_DIR / "results_wwb"
 OPENVINO_BIN = ROOT_DIR / "openvino" / "bin" / "intel64" / "Release"
 TBB_BIN = ROOT_DIR / "openvino" / "temp" / "Windows_AMD64" / "tbb" / "bin"
 GENAI_DLL_DIR = ROOT_DIR / "openvino.genai" / "build" / "openvino_genai"
-BIN_DIR = ROOT_DIR / "openvino.genai" / "build" / "bin"
+GENAI_RUNTIME_BIN_DIR = ROOT_DIR / "openvino.genai" / "build" / "bin"
+BIN_DIR = ROOT_DIR / "openvino.genai" / "build" / "bin" / "Release"
 EXE_PATH = BIN_DIR / "modeling_qwen3_5.exe"
 DEFAULT_MODEL_ROOT = Path(r"C:\data\models\Huggingface")
 SUMMARY_FILE_NAME = "summary.md"
@@ -111,7 +112,7 @@ def build_runtime_env(quant_preset: QuantPreset) -> dict:
         env["OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE"] = str(quant_preset.group_size)
         env["OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE"] = quant_preset.backup_mode
 
-    prepend_dirs = [OPENVINO_BIN, TBB_BIN, GENAI_DLL_DIR, BIN_DIR]
+    prepend_dirs = [OPENVINO_BIN, TBB_BIN, GENAI_DLL_DIR, GENAI_RUNTIME_BIN_DIR, BIN_DIR]
     path_value = os.pathsep.join(str(p) for p in prepend_dirs) + os.pathsep + env.get("PATH", "")
     env["PATH"] = path_value
     return env
@@ -126,6 +127,7 @@ def validate_runtime_layout() -> None:
         OPENVINO_BIN,
         TBB_BIN,
         GENAI_DLL_DIR,
+        GENAI_RUNTIME_BIN_DIR,
         BIN_DIR,
     ]
     for dir_path in required_dirs:

@@ -6,7 +6,14 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        from pip._vendor import tomli as tomllib
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path = [
