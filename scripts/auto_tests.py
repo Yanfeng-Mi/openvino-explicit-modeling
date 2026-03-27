@@ -275,6 +275,15 @@ QWEN3_5_35B_EXTRA_ENV = {
     "OV_GENAI_TURBOQUANT_KV_BITS": "8",
 }
 
+# Same as QWEN3_5_35B_EXTRA_ENV but without TurboQuant — used for baseline perf comparison.
+QWEN3_5_BASELINE_ENV = {
+    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
+    "OV_GENAI_USE_MODELING_API": "1",
+    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
+    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
+    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
+}
+
 TEST_SPECS: List[Dict[str, Any]] = [
     {
         "name": "Modeling API Unit Tests",
@@ -616,6 +625,70 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
         "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    # --- Qwen3.5 baseline (no TurboQuant) — for perf comparison ---
+    {
+        "name": "Huggingface Qwen3.5-0.8B modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-0.8B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.5-2B modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-2B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.5-4B modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.5-9B modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-9B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.5-27B modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-27B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.5-35B-A3B-Base modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B-Base",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.5-35B-A3B modeling_qwen3_5 text (baseline)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
         "use_named_model_arg": True,
     },
     {
