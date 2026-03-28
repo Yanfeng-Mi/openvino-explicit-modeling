@@ -213,6 +213,17 @@ MODELING_QWEN3_5_TEXT_ARGS = [
     "--temperature",
     "0",
 ]
+# Same as above but without --cache-model (avoids pre-existing IR serialization bug).
+MODELING_QWEN3_5_TEXT_NOCACHE_ARGS = [
+    "--mode",
+    "text",
+    "--prompt",
+    PROMPT,
+    "--output-tokens",
+    "300",
+    "--temperature",
+    "0",
+]
 QWEN3_5_35B_GREEDY_TEXT_ARGS = [
     PROMPT,
     "GPU",
@@ -308,6 +319,45 @@ QWEN3_5_GPU_COMPRESS_ENV = {
     "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
     "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
     "OV_GENAI_GPU_KV_COMPRESS": "1",
+}
+
+# TQ INT4 explicit quantization: SRHT rotation + 4-bit KV cache (explicit dequant path).
+# Halves KV cache memory vs INT8. Uses explicit TQ encode/decode in the graph.
+QWEN3_5_TQ_INT4_ENV = {
+    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
+    "OV_GENAI_USE_MODELING_API": "1",
+    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
+    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
+    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
+    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
+    "OV_GENAI_TURBOQUANT_KV_BITS": "4",
+}
+
+# TQ INT4 GPU-native: SRHT rotation + standard f16 KV + GPU plugin i8 auto-compress.
+# Note: GPU plugin only supports i8, so this is effectively TQ rotation + GPU i8.
+# For true INT4 KV cache, use TQ INT4 explicit path above.
+QWEN3_5_TQ_INT4_GPU_NATIVE_ENV = {
+    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
+    "OV_GENAI_USE_MODELING_API": "1",
+    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
+    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
+    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
+    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
+    "OV_GENAI_TURBOQUANT_KV_BITS": "4",
+    "OV_GENAI_TQ_GPU_NATIVE": "1",
+}
+
+# TQ INT4 with F16-cache: pack codes for storage, dequant only new tokens each step.
+# Stores both packed i8 codes (memory savings) and f16 dequant cache (speed).
+QWEN3_5_TQ_INT4_F16CACHE_ENV = {
+    "OV_GPU_MOE_DISABLE_ONEDNN": "1",
+    "OV_GENAI_USE_MODELING_API": "1",
+    "OV_GENAI_INFLIGHT_QUANT_MODE": "int4_asym",
+    "OV_GENAI_INFLIGHT_QUANT_GROUP_SIZE": "128",
+    "OV_GENAI_INFLIGHT_QUANT_BACKUP_MODE": "int4_asym",
+    "OV_GENAI_TURBOQUANT_KV_CACHE": "1",
+    "OV_GENAI_TURBOQUANT_KV_BITS": "4",
+    "OV_GENAI_TQ_F16_CACHE": "1",
 }
 
 TEST_SPECS: List[Dict[str, Any]] = [
@@ -935,6 +985,54 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_5_PERF_16K_ARGS,
         "extra_env": QWEN3_5_TQ_GPU_NATIVE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    # ---------------------------------------------------------------------------
+    # TQ INT4 tests — Qwen3.5-4B  (packed 4-bit KV cache, halves memory vs i8)
+    # ---------------------------------------------------------------------------
+    {
+        "name": "Qwen3.5-4B TQ INT4 explicit (no cache)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
+        "extra_env": QWEN3_5_TQ_INT4_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Qwen3.5-4B TQ INT4 GPU-native (no cache)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
+        "extra_env": QWEN3_5_TQ_INT4_GPU_NATIVE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Qwen3.5-4B baseline (no cache)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
+        "extra_env": QWEN3_5_BASELINE_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Qwen3.5-4B TQ INT8 explicit (no cache)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
+        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Qwen3.5-4B TQ INT4 f16-cache (no cache)",
+        "model_rel": Path("Huggingface") / "Qwen3.5-4B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_NOCACHE_ARGS.copy(),
+        "extra_env": QWEN3_5_TQ_INT4_F16CACHE_ENV.copy(),
         "use_named_model_arg": True,
     },
 ]
