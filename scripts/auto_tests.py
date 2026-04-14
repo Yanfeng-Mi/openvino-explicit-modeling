@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -13,30 +14,51 @@ DEFAULT_PROMPT = "introduce ffmpeg in details"
 PROMPT_FILE_NAME = "prompt_1k.txt"
 COMMON_ARGS = ["GPU", "1", "1", "100"]
 
-DEFAULT_MODELS_ROOTS: Tuple[Path, Path] = (
-    Path(r"D:\data\models"),
-    Path(r"C:\data\models"),
-)
+IS_WINDOWS = os.name == "nt"
+EXECUTABLE_SUFFIX = ".exe" if IS_WINDOWS else ""
+
+
+def _default_models_roots() -> Tuple[Path, ...]:
+    raw = os.environ.get("OPENVINO_MODELS_ROOT")
+    if raw:
+        normalized = raw.replace(",", ";")
+        roots = tuple(Path(item.strip()) for item in normalized.split(";") if item.strip())
+        if roots:
+            return roots
+    if IS_WINDOWS:
+        return (
+            Path(r"D:\data\models"),
+            Path(r"C:\data\models"),
+        )
+    return (Path.home() / "data" / "models",)
+
+
+DEFAULT_MODELS_ROOTS = _default_models_roots()
 DEFAULT_MODELS_ROOTS_TEXT = "; ".join(str(path) for path in DEFAULT_MODELS_ROOTS)
+
 DEFAULT_BUILD_TYPE = "Release"
 FALLBACK_BUILD_TYPE = "RelWithDebInfo"
 SUPPORTED_BUILD_TYPES: Tuple[str, str] = (DEFAULT_BUILD_TYPE, FALLBACK_BUILD_TYPE)
 BUILD_TYPE_TOKEN = "__BUILD_TYPE__"
-OPENVINO_GENAI_REQUIRED_DLLS: Tuple[str, ...] = (
-    "openvino_genai.dll",
-    "openvino_tokenizers.dll",
+OPENVINO_GENAI_REQUIRED_LIB_STEMS: Tuple[str, ...] = (
+    "openvino_genai",
+    "openvino_tokenizers",
 )
-OPENVINO_RUNTIME_REQUIRED_DLLS: Tuple[str, ...] = ("openvino.dll",)
+OPENVINO_RUNTIME_REQUIRED_LIB_STEMS: Tuple[str, ...] = ("openvino",)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPT_ROOT_DEFAULT = SCRIPT_DIR.parent
 TEST_IMAGE_PATH = SCRIPT_DIR / "test.jpg"
 TEST_OCR2_IMAGE_PATH = SCRIPT_DIR / "test_ocr2.png"
-TEST_AUDIO_PATH = SCRIPT_DIR / "asr_zh_60s.wav"
+TEST_AUDIO_PATH = SCRIPT_DIR / "test_0p5s.wav"
 ACC100_DIR = SCRIPT_DIR / "acc100"
 ACC100_WAV_DIR = ACC100_DIR / "wav"
 ACC100_TEXT_PATH = ACC100_DIR / "text"
 PROMPT_FILE_PATH = SCRIPT_DIR / PROMPT_FILE_NAME
+
+
+def executable_name(stem: str) -> str:
+    return f"{stem}{EXECUTABLE_SUFFIX}"
 
 
 def load_prompt(prompt_file_path: Path, fallback_prompt: str) -> str:
@@ -64,28 +86,28 @@ TEXT_EXE_REL = (
     / "build"
     / "bin"
     / BUILD_TYPE_TOKEN
-    / "greedy_causal_lm.exe"
+    / executable_name("greedy_causal_lm")
 )
 TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / BUILD_TYPE_TOKEN
 GENAI_BIN_REL = Path("openvino.genai") / "build" / "bin" / BUILD_TYPE_TOKEN
 GENAI_RUNTIME_BIN_REL = Path("openvino.genai") / "build" / "bin"
-MODELING_QWEN_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_vl.exe"
-MODELING_QWEN3_5_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_5.exe"
-MODELING_DEEPSEEK_OCR2_EXE_REL = GENAI_BIN_REL / "modeling_deepseek_ocr2.exe"
-MODELING_ZIMAGE_EXE_REL = GENAI_BIN_REL / "modeling_zimage.exe"
-MODELING_WAN_T2V_EXE_REL = GENAI_BIN_REL / "modeling_wan_t2v.exe"
-MODELING_DFLASH_EXE_REL = GENAI_BIN_REL / "modeling_dflash.exe"
-MODELING_QWEN3_TTS_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_tts.exe"
-BENCHMARK_GENAI_EXE_REL = GENAI_BIN_REL / "benchmark_genai.exe"
-MODELING_QWEN3_ASR_EXE_REL = GENAI_BIN_REL / "modeling_qwen3_asr.exe"
-MODELING_GLM_OCR_EXE_REL = GENAI_BIN_REL / "modeling_glm_ocr.exe"
+MODELING_QWEN_EXE_REL = GENAI_BIN_REL / executable_name("modeling_qwen3_vl")
+MODELING_QWEN3_5_EXE_REL = GENAI_BIN_REL / executable_name("modeling_qwen3_5")
+MODELING_DEEPSEEK_OCR2_EXE_REL = GENAI_BIN_REL / executable_name("modeling_deepseek_ocr2")
+MODELING_ZIMAGE_EXE_REL = GENAI_BIN_REL / executable_name("modeling_zimage")
+MODELING_WAN_T2V_EXE_REL = GENAI_BIN_REL / executable_name("modeling_wan_t2v")
+MODELING_DFLASH_EXE_REL = GENAI_BIN_REL / executable_name("modeling_dflash")
+MODELING_QWEN3_TTS_EXE_REL = GENAI_BIN_REL / executable_name("modeling_qwen3_tts")
+BENCHMARK_GENAI_EXE_REL = GENAI_BIN_REL / executable_name("benchmark_genai")
+MODELING_QWEN3_ASR_EXE_REL = GENAI_BIN_REL / executable_name("modeling_qwen3_asr")
+MODELING_GLM_OCR_EXE_REL = GENAI_BIN_REL / executable_name("modeling_glm_ocr")
 
 MODELING_ULT_EXE_REL = (
     Path("openvino.genai")
     / "build"
     / "bin"
     / BUILD_TYPE_TOKEN
-    / "test_modeling_api.exe"
+    / executable_name("test_modeling_api")
 )
 PATH_PREPEND_REL = Path("openvino.genai") / "build" / "openvino_genai"
 TBB_BIN_REL_CANDIDATES: Tuple[Path, ...] = (
@@ -821,22 +843,16 @@ def _remove_build_type_token_segment(path_rel: Path) -> Path:
     return Path(rel)
 
 
-def resolve_executable_path(root: Path, exe_rel: Path, build_type: str) -> Path:
-    """Resolve exe path and auto-detect whether BUILD_TYPE_TOKEN is needed.
+def resolve_artifact_path(root: Path, path_rel: Path, build_type: str) -> Path:
+    primary = root / resolve_build_type_path(path_rel, build_type)
+    candidates = [primary]
 
-    Preferred layout uses BUILD_TYPE_TOKEN. If the executable is not found there,
-    fall back to a no-build-type layout (e.g. .../bin/foo.exe).
-    """
-    primary = root / resolve_build_type_path(exe_rel, build_type)
-    if primary.is_file():
-        return primary
+    if BUILD_TYPE_TOKEN in str(path_rel):
+        candidates.append(root / _remove_build_type_token_segment(path_rel))
 
-    if BUILD_TYPE_TOKEN not in str(exe_rel):
-        return primary
-
-    fallback = root / _remove_build_type_token_segment(exe_rel)
-    if fallback.is_file():
-        return fallback
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
 
     return primary
 
@@ -847,20 +863,22 @@ def format_rel_path(path_rel: Path, build_type: Optional[str] = None) -> str:
 
 
 def resolve_executable_path(root: Path, exe_rel: Path, build_type: str) -> Path:
-    # Prefer the original layout first, then fall back to VS multi-config layout:
-    #   openvino.genai/build/bin/<BuildType>/*.exe
-    primary = root / resolve_build_type_path(exe_rel, build_type)
-    candidates = [primary]
+    return resolve_artifact_path(root, exe_rel, build_type)
 
-    if exe_rel.suffix.lower() == ".exe":
-        candidate_with_config_subdir = root / exe_rel.parent / build_type / exe_rel.name
-        candidates.append(candidate_with_config_subdir)
 
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
+def required_library_patterns(stem: str) -> Tuple[str, ...]:
+    if IS_WINDOWS:
+        return (f"{stem}.dll",)
+    return (f"lib{stem}.so", f"lib{stem}.so.*")
 
-    return primary
+
+def contains_required_library(directory: Path, stem: str) -> bool:
+    if not directory.is_dir():
+        return False
+    for pattern in required_library_patterns(stem):
+        if any(directory.glob(pattern)):
+            return True
+    return False
 
 
 def detect_layout_root(root: Path) -> Path:
@@ -874,16 +892,22 @@ def detect_layout_root(root: Path) -> Path:
 
 
 def find_tbb_bin_dir(root: Path) -> Optional[str]:
+    tbb_library_names = ("tbb12.dll", "libtbb.so", "libtbb.so.12", "libtbb.dylib")
+
+    def contains_tbb_runtime(directory: Path) -> bool:
+        return directory.is_dir() and any((directory / name).exists() for name in tbb_library_names)
+
     for rel_path in TBB_BIN_REL_CANDIDATES:
         candidate = root / rel_path
-        if candidate.is_dir() and (candidate / "tbb12.dll").is_file():
+        if contains_tbb_runtime(candidate):
             return str(candidate)
 
     tbb_glob_root = root / "openvino" / "temp"
     if tbb_glob_root.is_dir():
-        for candidate in sorted(tbb_glob_root.glob("*/tbb/bin")):
-            if candidate.is_dir() and (candidate / "tbb12.dll").is_file():
-                return str(candidate)
+        for pattern in ("*/tbb/bin", "*/tbb/lib", "*/tbb/lib64"):
+            for candidate in sorted(tbb_glob_root.glob(pattern)):
+                if contains_tbb_runtime(candidate):
+                    return str(candidate)
     return None
 
 
@@ -891,7 +915,7 @@ def build_path_entries(root: Path, build_type: str) -> List[str]:
     path_entries = [
         str(root / PATH_PREPEND_REL),
         str(root / GENAI_RUNTIME_BIN_REL),
-        str(root / resolve_build_type_path(TEXT_WORK_DIR_REL, build_type)),
+        str(resolve_artifact_path(root, TEXT_WORK_DIR_REL, build_type)),
     ]
     tbb_bin_dir = find_tbb_bin_dir(root)
     if tbb_bin_dir:
@@ -915,23 +939,24 @@ def collect_missing_build_artifacts(
     openvino_genai_dir = root / PATH_PREPEND_REL
     if not openvino_genai_dir.is_dir():
         add_missing("OpenVINO GenAI runtime directory not found", openvino_genai_dir)
-    for dll_name in OPENVINO_GENAI_REQUIRED_DLLS:
-        dll_path = openvino_genai_dir / dll_name
-        if not dll_path.is_file():
-            add_missing("OpenVINO GenAI runtime DLL not found", dll_path)
+    for lib_stem in OPENVINO_GENAI_REQUIRED_LIB_STEMS:
+        if not contains_required_library(openvino_genai_dir, lib_stem):
+            add_missing(
+                "OpenVINO GenAI runtime library not found",
+                openvino_genai_dir / required_library_patterns(lib_stem)[0],
+            )
 
-    openvino_runtime_dir = root / resolve_build_type_path(TEXT_WORK_DIR_REL, build_type)
+    openvino_runtime_dir = resolve_artifact_path(root, TEXT_WORK_DIR_REL, build_type)
     if not openvino_runtime_dir.is_dir():
         add_missing(
             f"OpenVINO runtime directory not found for build type {build_type}",
             openvino_runtime_dir,
         )
-    for dll_name in OPENVINO_RUNTIME_REQUIRED_DLLS:
-        dll_path = openvino_runtime_dir / dll_name
-        if not dll_path.is_file():
+    for lib_stem in OPENVINO_RUNTIME_REQUIRED_LIB_STEMS:
+        if not contains_required_library(openvino_runtime_dir, lib_stem):
             add_missing(
-                f"OpenVINO runtime DLL not found for build type {build_type}",
-                dll_path,
+                f"OpenVINO runtime library not found for build type {build_type}",
+                openvino_runtime_dir / required_library_patterns(lib_stem)[0],
             )
 
     genai_runtime_bin_dir = root / GENAI_RUNTIME_BIN_REL
@@ -964,15 +989,27 @@ def format_missing_build_artifacts(build_type: str, missing: List[str]) -> str:
 def build_env(
     path_entries: List[str], extra_env: Optional[Dict[str, str]] = None
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
+    def prepend_env_value(
+        env_map: Dict[str, str],
+        applied_map: Dict[str, str],
+        key: str,
+        value: str,
+    ) -> None:
+        current = env_map.get(key, "")
+        env_map[key] = f"{value}{os.pathsep}{current}" if current else value
+        applied_map[key] = env_map[key]
+
     env = os.environ.copy()
     applied_env: Dict[str, str] = {}
-    original_path = env.get("PATH", "")
-    joined = ";".join(entry for entry in path_entries if entry)
-    env["PATH"] = f"{joined};{original_path}" if original_path else joined
-    applied_env["PATH"] = env["PATH"]
+    joined = os.pathsep.join(entry for entry in path_entries if entry)
+    if joined:
+        prepend_env_value(env, applied_env, "PATH", joined)
+        if not IS_WINDOWS:
+            prepend_env_value(env, applied_env, "LD_LIBRARY_PATH", joined)
     if extra_env and extra_env.get("PATH"):
-        env["PATH"] = f"{extra_env['PATH']};{env['PATH']}"
-        applied_env["PATH"] = env["PATH"]
+        prepend_env_value(env, applied_env, "PATH", extra_env["PATH"])
+    if extra_env and extra_env.get("LD_LIBRARY_PATH"):
+        prepend_env_value(env, applied_env, "LD_LIBRARY_PATH", extra_env["LD_LIBRARY_PATH"])
     # Set OV_GENAI_USE_MODELING_API from extra_env if present, else from os.environ, else default to "1"
     if extra_env and "OV_GENAI_USE_MODELING_API" in extra_env:
         env["OV_GENAI_USE_MODELING_API"] = extra_env["OV_GENAI_USE_MODELING_API"]
@@ -981,7 +1018,7 @@ def build_env(
     applied_env["OV_GENAI_USE_MODELING_API"] = env["OV_GENAI_USE_MODELING_API"]
     if extra_env:
         for k, v in extra_env.items():
-            if k in {"PATH", "OV_GENAI_USE_MODELING_API"}:
+            if k in {"PATH", "LD_LIBRARY_PATH", "OV_GENAI_USE_MODELING_API"}:
                 continue
             env[k] = v
             applied_env[k] = v
@@ -989,7 +1026,9 @@ def build_env(
 
 
 def format_env_commands(applied_env: Dict[str, str]) -> List[str]:
-    return [f"set {key}={value}" for key, value in applied_env.items()]
+    if IS_WINDOWS:
+        return [f"set {key}={value}" for key, value in applied_env.items()]
+    return [f"export {key}={shlex.quote(value)}" for key, value in applied_env.items()]
 
 
 def extract_performance(output: str) -> str:
@@ -1061,10 +1100,15 @@ def build_command(exe_path: str, model_path: str, command_args: List[str]) -> Li
 
 
 def command_to_string(args: List[str]) -> str:
-    def quote(arg: str) -> str:
-        return f"\"{arg}\"" if " " in arg or "\t" in arg else arg
+    if IS_WINDOWS:
+        return subprocess.list2cmdline(args)
+    return " ".join(shlex.quote(arg) for arg in args)
 
-    return " ".join(quote(arg) for arg in args)
+
+def format_cd_command(work_dir: Path) -> str:
+    if IS_WINDOWS:
+        return f"cd /d {subprocess.list2cmdline([str(work_dir)])}"
+    return command_to_string(["cd", str(work_dir)])
 
 
 def format_duration(delta: _dt.timedelta) -> str:
@@ -1135,6 +1179,7 @@ def parse_args() -> argparse.Namespace:
             "Examples:\n"
             "  python auto_tests.py\n"
             "  python auto_tests.py --root ..\n"
+            "  python auto_tests.py --root /data/openvino-modeling-api --models-root ~/data/models\n"
             "  python auto_tests.py --root D:\\data\\code\\Openvino_new_arch_poc\\openvino-new-arch\n"
             "  python auto_tests.py --root .. --list\n"
             "  python auto_tests.py --root .. --tests 0,1,2\n"
@@ -1160,6 +1205,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Root folder path(s) for model files. "
             f"Defaults to checking: {DEFAULT_MODELS_ROOTS_TEXT}. "
+            "You can also override the defaults with OPENVINO_MODELS_ROOT. "
             "Multiple roots may be separated by ';' or ','. "
             "Quote ';' on PowerShell."
         ),
@@ -1278,7 +1324,7 @@ def resolve_tests(
             "index": str(idx),
             "name": spec["name"],
             "exe": str(resolve_executable_path(root, spec["exe_rel"], build_type)),
-            "work_dir": str(root / resolve_build_type_path(spec["work_dir_rel"], build_type)),
+            "work_dir": str(resolve_artifact_path(root, spec["work_dir_rel"], build_type)),
             "model": str(model_path) if model_path else None,
             "command_args": spec["command_args"],
         }
@@ -1481,7 +1527,7 @@ def main() -> int:
                     ["--wav", "<ACC100_WAV>", *command_args],
                 )
             )
-        cd_cmd = f"cd {work_dir}"
+        cd_cmd = format_cd_command(work_dir)
 
         # Build env per test
         extra_env = test.get("extra_env")
