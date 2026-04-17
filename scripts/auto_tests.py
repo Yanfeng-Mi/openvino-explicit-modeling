@@ -7,13 +7,17 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 DEFAULT_PROMPT = "introduce ffmpeg in details"
 PROMPT_FILE_NAME = "prompt_1k.txt"
 COMMON_ARGS = ["GPU", "1", "1", "100"]
 
-DEFAULT_MODELS_ROOT = r"D:\data\models"
+DEFAULT_MODELS_ROOTS: Tuple[Path, Path] = (
+    Path(r"D:\data\models"),
+    Path(r"C:\data\models"),
+)
+DEFAULT_MODELS_ROOTS_TEXT = "; ".join(str(path) for path in DEFAULT_MODELS_ROOTS)
 DEFAULT_BUILD_TYPE = "Release"
 FALLBACK_BUILD_TYPE = "RelWithDebInfo"
 SUPPORTED_BUILD_TYPES: Tuple[str, str] = (DEFAULT_BUILD_TYPE, FALLBACK_BUILD_TYPE)
@@ -617,6 +621,24 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "use_named_model_arg": True,
     },
     {
+        "name": "Huggingface Qwen3.6-35B-A3B modeling_qwen3_5 text",
+        "model_rel": Path("Huggingface") / "Qwen3.6-35B-A3B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_TEXT_ARGS.copy(),
+        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
+        "name": "Huggingface Qwen3.6-35B-A3B modeling_qwen3_5 vl",
+        "model_rel": Path("Huggingface") / "Qwen3.6-35B-A3B",
+        "exe_rel": MODELING_QWEN3_5_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": MODELING_QWEN3_5_VL_ARGS.copy(),
+        "extra_env": QWEN3_5_35B_EXTRA_ENV.copy(),
+        "use_named_model_arg": True,
+    },
+    {
         "name": "Huggingface Qwen3.5-35B-A3B greedy_causal_lm text",
         "model_rel": Path("Huggingface") / "Qwen3.5-35B-A3B",
         "exe_rel": TEXT_EXE_REL,
@@ -760,6 +782,32 @@ def parse_build_type(value: str) -> str:
     raise argparse.ArgumentTypeError(
         f"Unsupported build type: {value}. Choose from: {choices}."
     )
+
+
+def parse_models_roots(value: str) -> List[Path]:
+    normalized = value.replace(",", ";")
+    items = [item.strip() for item in normalized.split(";") if item.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError("At least one models root must be provided.")
+    return [Path(item) for item in items]
+
+
+def format_models_roots(models_roots: Sequence[Path]) -> str:
+    return "; ".join(str(path) for path in models_roots)
+
+
+def resolve_model_path(model_rel: Path, models_roots: Sequence[Path]) -> Optional[Path]:
+    for models_root in models_roots:
+        candidate = models_root / model_rel
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def format_model_search_locations(
+    model_rel: Path, models_roots: Sequence[Path]
+) -> str:
+    return "; ".join(str(models_root / model_rel) for models_root in models_roots)
 
 
 def resolve_build_type_path(path_rel: Path, build_type: str) -> Path:
@@ -1093,6 +1141,7 @@ def parse_args() -> argparse.Namespace:
             "  python auto_tests.py --root .. --tests 0 1 2\n"
             "  python auto_tests.py --root .. --tests 1~5,7,8~10\n"
             "  python auto_tests.py --root .. --models-root D:\\data\\models\n"
+            "  python auto_tests.py --root .. --models-root \"D:\\data\\models;C:\\data\\models\"\n"
             "  python auto_tests.py --root .. --build-type RelWithDebInfo\n"
         ),
     )
@@ -1106,8 +1155,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--models-root",
-        default=DEFAULT_MODELS_ROOT,
-        help=f"Root folder path for model files (default: {DEFAULT_MODELS_ROOT}).",
+        type=parse_models_roots,
+        default=list(DEFAULT_MODELS_ROOTS),
+        help=(
+            "Root folder path(s) for model files. "
+            f"Defaults to checking: {DEFAULT_MODELS_ROOTS_TEXT}. "
+            "Multiple roots may be separated by ';' or ','. "
+            "Quote ';' on PowerShell."
+        ),
     )
     parser.add_argument(
         "--build-type",
@@ -1131,8 +1186,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def list_tests(models_root: Path, build_type: Optional[str] = None) -> None:
-    print(f"Models root: {models_root}")
+def list_tests(models_roots: Sequence[Path], build_type: Optional[str] = None) -> None:
+    print(f"Models roots: {format_models_roots(models_roots)}")
     if build_type:
         print(f"Build type: {build_type}")
     else:
@@ -1189,7 +1244,10 @@ def parse_test_indices(raw_items: List[str], max_index: int) -> List[int]:
 
 
 def resolve_tests(
-    root: Path, models_root: Path, indices: Optional[List[int]], build_type: str
+    root: Path,
+    models_roots: Sequence[Path],
+    indices: Optional[List[int]],
+    build_type: str,
 ) -> List[Dict[str, Any]]:
     selected = indices if indices is not None else list(range(len(TEST_SPECS)))
     resolved: List[Dict[str, Any]] = []
@@ -1199,12 +1257,22 @@ def resolve_tests(
         if spec["model_rel"] is None:
             model_path = None
         else:
-            model_path = models_root / spec["model_rel"]
+            model_path = resolve_model_path(spec["model_rel"], models_roots)
+            if model_path is None:
+                raise FileNotFoundError(
+                    f"Model not found for test [{idx}] {spec['name']}: "
+                    f"{format_model_search_locations(spec['model_rel'], models_roots)}"
+                )
         
         # Handle DFlash tests with draft model
         draft_model_path = None
         if spec.get("is_dflash") and "draft_model_rel" in spec:
-            draft_model_path = models_root / spec["draft_model_rel"]
+            draft_model_path = resolve_model_path(spec["draft_model_rel"], models_roots)
+            if draft_model_path is None:
+                raise FileNotFoundError(
+                    f"Draft model not found for test [{idx}] {spec['name']}: "
+                    f"{format_model_search_locations(spec['draft_model_rel'], models_roots)}"
+                )
         
         resolved_test = {
             "index": str(idx),
@@ -1222,11 +1290,12 @@ def resolve_tests(
             resolved_test["is_ult"] = True
             # Qwen3VLE2E.PrefillAndDecode requires QWEN3_VL_MODEL_DIR
             qwen3_vl_candidates = [
-                models_root / "Huggingface" / "Qwen3-VL-2B-Instruct",
-                models_root / "Huggingface" / "Qwen3-VL-4B-Instruct",
+                Path("Huggingface") / "Qwen3-VL-2B-Instruct",
+                Path("Huggingface") / "Qwen3-VL-4B-Instruct",
             ]
-            for cand in qwen3_vl_candidates:
-                if cand.is_dir():
+            for model_rel in qwen3_vl_candidates:
+                cand = resolve_model_path(model_rel, models_roots)
+                if cand and cand.is_dir():
                     resolved_test["extra_env"]["QWEN3_VL_MODEL_DIR"] = str(cand)
                     break
         if spec.get("is_dflash"):
@@ -1246,10 +1315,15 @@ def main() -> int:
     if not root.is_absolute():
         root = (Path.cwd() / root).resolve()
     workspace_root = detect_layout_root(root)
-    models_root = Path(args.models_root)
+    models_roots: List[Path] = []
+    for candidate in args.models_root:
+        candidate_path = Path(candidate)
+        if not candidate_path.is_absolute():
+            candidate_path = (Path.cwd() / candidate_path).resolve()
+        models_roots.append(candidate_path)
 
     if args.list:
-        list_tests(models_root, args.build_type)
+        list_tests(models_roots, args.build_type)
         return 0
 
     if not workspace_root.exists():
@@ -1273,9 +1347,13 @@ def main() -> int:
     tests: List[Dict[str, Any]] = []
 
     for candidate_build_type in candidate_build_types:
-        candidate_tests = resolve_tests(
-            workspace_root, models_root, indices, candidate_build_type
-        )
+        try:
+            candidate_tests = resolve_tests(
+                workspace_root, models_roots, indices, candidate_build_type
+            )
+        except FileNotFoundError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         missing_artifacts = collect_missing_build_artifacts(
             workspace_root, candidate_tests, candidate_build_type
         )
