@@ -10,6 +10,7 @@ This repository provides:
 - `build.bat` to build both `openvino` and `openvino.genai`
 - `build.sh` to build both `openvino` and `openvino.genai` on Linux
 - `run.bat` and `scripts/auto_tests.py` for smoke and functional checks
+- `run_modeling_private_qwen3_omni.bat` and `run_modeling_private_qwen3_omni.sh` for private Qwen3 Omni launch on Windows and Linux
 - benchmark scripts under `scripts/` for LLM accuracy evaluation
 
 ## 1. Prerequisites
@@ -61,9 +62,8 @@ bash repo.sh
 
 - clone `openvino`
 - clone `openvino.genai`
-- check out the `explicit-modeling` branch
+- check out the configured OpenVINO and OpenVINO GenAI refs
 - initialize submodules
-- apply the oneDNN patch helper in `scripts\apply_onednn_patch.bat` or `scripts/apply_onednn_patch.sh`
 
 Expected workspace layout:
 
@@ -195,6 +195,28 @@ run.bat
 `run.bat` is Windows-only. On Linux, use the direct executable flow in Option A
 or run `auto_tests.py` with an explicit `--models-root`.
 
+### Option B1: Use the Qwen3 Omni launcher
+
+For private Qwen3 Omni image/TTS smoke runs, use the dedicated launcher in the
+workspace root. It sets the bridge path, enables `OV_GENAI_USE_MODELING_API=1`,
+and prepares the runtime library search path.
+
+Windows:
+
+```bat
+.venv\Scripts\activate
+cd my_workspace\openvino-explicit-modeling
+run_modeling_private_qwen3_omni.bat image --model-dir D:\data\models\Huggingface\Qwen3-Omni --image D:\data\images\cat.jpg --prompt "What can you see" --device CPU --cache-model
+```
+
+Linux:
+
+```bash
+source .venv/bin/activate
+cd my_workspace/openvino-explicit-modeling
+bash run_modeling_private_qwen3_omni.sh image --model-dir /data/models/Huggingface/Qwen3-Omni --image /data/images/cat.jpg --prompt "What can you see" --device CPU --cache-model
+```
+
 ### Option C: Use `auto_tests.py`
 
 `auto_tests.py` runs functional checks and generates a markdown report under:
@@ -232,8 +254,9 @@ python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/mode
 python openvino-explicit-modeling/scripts/auto_tests.py --models-root /data/models --tests all
 ```
 
-Note: `auto_tests.py` still defaults to a Windows models root, so Linux runs
-should pass `--models-root` explicitly.
+Note: `auto_tests.py` uses platform-specific default model roots and also honors
+`OPENVINO_MODELS_ROOT`. Passing `--models-root` explicitly is still recommended
+for Linux runs.
 
 Report contents:
 

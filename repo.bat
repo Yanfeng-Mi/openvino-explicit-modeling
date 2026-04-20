@@ -9,10 +9,8 @@ if "%ROOT_DIR:~-1%"=="\" set "ROOT_DIR=%ROOT_DIR:~0,-1%"
 
 set "OPENVINO_DIR=%ROOT_DIR%\openvino"
 set "GENAI_DIR=%ROOT_DIR%\openvino.genai"
-set "OPENVINO_URL=https://github.com/liangali/openvino.git"
-set "GENAI_URL=https://github.com/liangali/openvino.genai"
-set "TARGET_BRANCH=explicit-modeling"
-set "PATCH_SCRIPT=%SCRIPT_DIR%\scripts\apply_onednn_patch.bat"
+set "OPENVINO_URL=https://github.com/Yanfeng-Mi/openvino.git"
+set "GENAI_URL=https://github.com/Yanfeng-Mi/openvino.genai.git"
 
 echo [INFO] repo.bat path     : %SCRIPT_DIR%
 echo [INFO] workspace root    : %ROOT_DIR%
@@ -20,23 +18,11 @@ echo [INFO] workspace root    : %ROOT_DIR%
 call :ensure_git
 if errorlevel 1 exit /b 1
 
-call :ensure_repo "%OPENVINO_DIR%" "%OPENVINO_URL%" "%TARGET_BRANCH%" "openvino"
+call :ensure_repo "%OPENVINO_DIR%" "%OPENVINO_URL%" "2026.1.0" "openvino"
 if errorlevel 1 exit /b 1
 
-call :ensure_repo "%GENAI_DIR%" "%GENAI_URL%" "%TARGET_BRANCH%" "openvino.genai"
+call :ensure_repo "%GENAI_DIR%" "%GENAI_URL%" "2026.1.0.0" "openvino.genai"
 if errorlevel 1 exit /b 1
-
-if not exist "%PATCH_SCRIPT%" (
-    echo [ERROR] Patch helper not found: %PATCH_SCRIPT%
-    exit /b 1
-)
-
-echo [PATCH] onednn_gpu
-call "%PATCH_SCRIPT%"
-if errorlevel 1 (
-    echo [ERROR] Failed to apply onednn_gpu patch.
-    exit /b 1
-)
 
 echo [OK] Repository setup finished.
 echo      Ready to build from: %ROOT_DIR%

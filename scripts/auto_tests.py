@@ -91,6 +91,7 @@ TEXT_EXE_REL = (
 TEXT_WORK_DIR_REL = Path("openvino") / "bin" / "intel64" / BUILD_TYPE_TOKEN
 GENAI_BIN_REL = Path("openvino.genai") / "build" / "bin" / BUILD_TYPE_TOKEN
 GENAI_RUNTIME_BIN_REL = Path("openvino.genai") / "build" / "bin"
+BENCHMARK_VLM_EXE_REL = GENAI_BIN_REL / executable_name("benchmark_vlm")
 MODELING_QWEN_EXE_REL = GENAI_BIN_REL / executable_name("modeling_qwen3_vl")
 MODELING_QWEN3_5_EXE_REL = GENAI_BIN_REL / executable_name("modeling_qwen3_5")
 MODELING_DEEPSEEK_OCR2_EXE_REL = GENAI_BIN_REL / executable_name("modeling_deepseek_ocr2")
@@ -267,6 +268,21 @@ MODELING_QWEN3_5_VL_ARGS = [
     "describe this picture in details: ",
     "--output-tokens",
     "300",
+]
+BENCHMARK_VLM_QWEN3_VL_ARGS = [
+    "--image",
+    str(TEST_IMAGE_PATH),
+    "--prompt",
+    "describe this picture in details",
+    "--num_warmup",
+    "0",
+    "--num_iter",
+    "1",
+    "--max_new_tokens",
+    "64",
+    "--device",
+    "GPU",
+
 ]
 
 # Perf validation args: use --prompt-file to handle large prompts (avoids Windows CLI length limits)
@@ -515,6 +531,14 @@ TEST_SPECS: List[Dict[str, Any]] = [
         "exe_rel": MODELING_QWEN3_TTS_EXE_REL,
         "work_dir_rel": TEXT_WORK_DIR_REL,
         "command_args": MODELING_QWEN3_TTS_ARGS.copy(),
+    },
+    {
+        "name": "Qwen3-VL-4B-ov-int4",
+        "model_rel": Path("Huggingface") / "Qwen3-VL-4B-int4",
+        "exe_rel": BENCHMARK_VLM_EXE_REL,
+        "work_dir_rel": TEXT_WORK_DIR_REL,
+        "command_args": BENCHMARK_VLM_QWEN3_VL_ARGS.copy(),
+        "use_named_model_arg": True,
     },
     {
         "name": "Huggingface Qwen3.5-0.8B modeling_qwen3_5 text",
@@ -1061,7 +1085,26 @@ def extract_generated_text(output: str) -> str:
         lines = [line.strip() for line in output.splitlines() if line.strip()]
         return "\n".join(lines) if lines else "Not found in output."
     text_block = output[idx + len(marker) :].lstrip("\r\n")
-    return text_block.strip() if text_block.strip() else "Not found in output."
+    stop_labels = (
+        "Prompt token size:",
+        "Output token size:",
+        "Load time:",
+        "Generate time:",
+        "Tokenization time:",
+        "Detokenization time:",
+        "Embeddings preparation time:",
+        "TTFT:",
+        "TPOT:",
+        "Throughput:",
+    )
+    text_lines: List[str] = []
+    for line in text_block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(stop_labels):
+            break
+        text_lines.append(line)
+    cleaned = "\n".join(text_lines).strip()
+    return cleaned if cleaned else "Not found in output."
 
 
 def extract_asr_text(output: str) -> str:
